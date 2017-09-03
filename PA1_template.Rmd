@@ -9,6 +9,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(scales)
+Sys.setenv(TZ='UTC')
 ```
 
 ## Loading and preprocessing the data
@@ -85,7 +86,8 @@ totalSteps <- aggregate(
 
 dailyStepsAvg <- mean(totalSteps$steps)
 dailyStepsMedian <- median(totalSteps$steps)
-
+```
+```{r plotTotalStepsPerDay}
 
 plotTotalSteps <- ggplot(totalSteps, aes(date))
 plotTotalSteps + geom_bar(
@@ -109,7 +111,7 @@ The median number of steps per day is **`r sprintf("%i", dailyStepsMedian)`**.
 
 I guess I need to make a time-series plot of the inter-average for multiple days here.
 
-```{r dailyAverage}
+```{r computeIntervalAverages}
 
 # create interval averages for all days
 intervalStepsAvg <- aggregate(
@@ -121,6 +123,9 @@ intervalStepsAvg <- aggregate(
 
 # determine which interval has the largest number of steps
 intervalStepsMax <- intervalStepsAvg[which.max(intervalStepsAvg$steps),]
+
+```
+```{r plotIntervalAverages}
 
 # plot 'em intervals up real good
 plotIntervalSteps <- ggplot(intervalStepsAvg, aes(interval, steps))
@@ -138,6 +143,175 @@ The 5-minute interval containing the most steps is **`r sub("^\\s+", "", strftim
 
 ## Imputing missing values
 
-What I want to do here is append an additional column to the data frame, where the original `steps` values is used if not `NA`, and if the value is missing, substitute the median five-minute value for the entire data set that is appropriate for that specific interval.
+What I want to do here is append an additional column to the data frame, where the original `steps` values is used if not `NA`, and if the value is missing, substitute the average five-minute value for the entire data set that is appropriate for that specific interval.
+
+The total number of `NA` intervals is **`r nrow(activityData[is.na(activityData$steps),])`**.
+
+```{r imputeOhNooo}
+
+# append an imputed number of steps to the original activity data.
+activityData$stepsImpute <- cbind(
+    apply(activityData[,c("steps","interval")],
+        1,
+        function(x) as.integer(
+            ifelse(
+                is.na(x['steps']),
+                    round(
+                        intervalStepsAvg[
+                            which(intervalStepsAvg$interval == x['interval']),
+                        ]$steps,
+                        digits = 0),
+                x['steps']
+            )
+        )
+    )
+)
+
+```
+```{r aggregateStepsImpute}
+
+# aggregate the imputed total steps.
+totalStepsImpute <- aggregate(
+    formula = stepsImpute ~ date,
+    data = activityData,
+    FUN = sum
+)
+
+names(totalStepsImpute) <- c("date","stepsImpute")
+
+dailyStepsImputeAvg <- mean(totalStepsImpute$stepsImpute)
+dailyStepsImputeMedian <- median(totalStepsImpute$stepsImpute)
+
+```
+```{r plotStepsImpute}
+
+# make a graph, recieve cookie
+plotTotalStepsImpute <- ggplot(totalStepsImpute, aes(date))
+plotTotalStepsImpute + geom_bar(
+    aes(weight = stepsImpute),
+    color = "firebrick",
+    fill = "firebrick1"
+    ) +
+    labs(title = "Total Steps Per Day",
+        subtitle = "Data Imputed from Interval Average",
+        x = "Date",
+        y = "Number of Steps"
+    )
+
+```
+
+After imputation, the average number of steps per day is **`r sprintf("%.1f", dailyStepsImputeAvg)`**.
+
+The median number of steps per day is **`r sprintf("%i", dailyStepsImputeMedian)`**.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+Yes, I am wasting my stupid weekend working on this project, while instead, I get paid to work on weekdays.
+
+```{r processWeekendIdiocy}
+
+#add a day of week, why not?
+activityData$dayOfWeek <- cbind(weekdays(activityData$dateTime))
+
+#then classify that day from above as a weekday/weekend in another column
+activityData$weekend <- cbind(
+    apply(
+        activityData[,"dayOfWeek"],
+        1,
+        function(x) ifelse(x %in% c("Saturday","Sunday"), "Weekend", "Weekday")
+    )
+)
+
+# calculate interval averages of imputed steps for weekdays, yay!
+intervalStepsAvgWeekday <- aggregate(
+    formula = stepsImpute ~ interval,
+    data = activityData[which(activityData$weekend == "Weekday"),],
+    FUN = mean,
+    na.action = na.omit
+)
+
+names(intervalStepsAvgWeekday) <- c("interval","stepsImpute")
+
+# I should probably have defined a function to aggregate this!
+intervalStepsAvgWeekend <- aggregate(
+    formula = stepsImpute ~ interval,
+    data = activityData[which(activityData$weekend == "Weekend"),],
+    FUN = mean,
+    na.action = na.omit
+)
+
+names(intervalStepsAvgWeekend) <- c("interval","stepsImpute")
+
+```
+```{r multiplot}
+# Multiple plot function
+#
+# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
+# - cols:   Number of columns in layout
+# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
+#
+# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
+# then plot 1 will go in the upper left, 2 will go in the upper right, and
+# 3 will go all the way across the bottom.
+#
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  library(grid)
+
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+ if (numPlots==1) {
+    print(plots[[1]])
+
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+```{r plotWeekendIdiocy}
+
+# make another graph, probably should have written a function for this, too!
+plotIntervalStepsWeekday <- ggplot(intervalStepsAvgWeekday, aes(interval, stepsImpute))
+plotAvgWeekday <- plotIntervalStepsWeekday +
+    geom_path(color = "blue") +
+    labs(title = "Daily Average Steps",
+         subtitle = "Weekday",
+         x = "Time of Day",
+         y = "Average Steps") +
+    scale_x_datetime(labels = date_format("%H:%M", tz = "UTC"))
+
+# yeah, I definitely should have written a function to do this!
+plotIntervalStepsWeekend <- ggplot(intervalStepsAvgWeekend, aes(interval, stepsImpute))
+plotAvgWeekend <- plotIntervalStepsWeekend +
+    geom_path(color = "blue") +
+    labs(title = "Daily Average Steps",
+         subtitle = "Weekend",
+         x = "Time of Day",
+         y = "Average Steps") +
+    scale_x_datetime(labels = date_format("%H:%M", tz = "UTC"))
+
+multiplot(plotAvgWeekday, plotAvgWeekend, cols = 1)
+
+```
