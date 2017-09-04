@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+
+
+
+<title>Reproducible Research: Peer Assessment 1</title>
+
+<script src="PA1_template_files/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="PA1_template_files/bootstrap-3.3.5/css/bootstrap.min.css" rel="stylesheet" />
+<script src="PA1_template_files/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="PA1_template_files/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="PA1_template_files/bootstrap-3.3.5/shim/respond.min.js"></script>
+<script src="PA1_template_files/navigation-1.1/tabsets.js"></script>
+<link href="PA1_template_files/highlightjs-1.1/default.css" rel="stylesheet" />
+<script src="PA1_template_files/highlightjs-1.1/highlight.js"></script>
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css">
+  pre:not([class]) {
+    background-color: white;
+  }
+</style>
+<script type="text/javascript">
+if (window.hljs && document.readyState && document.readyState === "complete") {
+   window.setTimeout(function() {
+      hljs.initHighlighting();
+   }, 0);
+}
+</script>
+
+
+
+<style type="text/css">
+h1 {
+  font-size: 34px;
+}
+h1.title {
+  font-size: 38px;
+}
+h2 {
+  font-size: 30px;
+}
+h3 {
+  font-size: 24px;
+}
+h4 {
+  font-size: 18px;
+}
+h5 {
+  font-size: 16px;
+}
+h6 {
+  font-size: 12px;
+}
+.table th:not([align]) {
+  text-align: left;
+}
+</style>
+
+
+</head>
+
+<body>
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+code {
+  color: inherit;
+  background-color: rgba(0, 0, 0, 0.04);
+}
+img {
+  max-width:100%;
+  height: auto;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+</style>
+
+
+
+<div class="container-fluid main-container">
+
+<!-- tabsets -->
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+</script>
+
+<!-- code folding -->
+
+
+
+
+
+
+<div class="fluid-row" id="header">
+
+
+
+<h1 class="title toc-ignore">Reproducible Research: Peer Assessment 1</h1>
+
+</div>
+
+
+<pre class="r"><code>knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(scales)
+Sys.setenv(TZ=&#39;UTC&#39;)</code></pre>
+<div id="loading-and-preprocessing-the-data" class="section level2">
+<h2>Loading and preprocessing the data</h2>
+<p>The step data is loaded from a ‘<a href="https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip">activity.csv</a>’ file provided by the instructor. The variables included in this dataset are:</p>
+<ul>
+<li><strong>steps</strong>: Number of steps taking in a 5-minute interval (missing values are coded as NA)</li>
+<li><strong>date</strong>: The date on which the measurement was taken in YYYY-MM-DD format</li>
+<li><strong>interval</strong>: Identifier for the 5-minute interval in which measurement was taken</li>
+</ul>
+<p>A fourth column was appended using the code below to represent a POSIXct datetiem value, where the date and five-minute time of day are pasted together and parsed using the <code>strptime()</code> function.</p>
+<pre class="r"><code>activityData &lt;- read.csv(
+    file = &#39;activity.csv&#39;,
+    colClasses = c(&#39;integer&#39;, &#39;character&#39;,&#39;character&#39;),
+    header = TRUE,
+    na.strings = c(&#39;NA&#39;)
+)
+
+## convert the date string to a POSIX value
+activityData$date &lt;- as.POSIXct(
+    strptime(activityData$date, &quot;%Y-%m-%d&quot;),
+    tz=&quot;UTC&quot;
+)
+
+## convert the interval string to a POSIX value
+activityData$interval &lt;- as.POSIXct(
+    strptime(
+        paste(
+                as.Date(as.POSIXct(0,
+                                   origin = &quot;1970-01-01&quot;,
+                                   tz = &quot;UTC&quot;)),
+                &quot; &quot;,
+                substr(sprintf(&quot;%04s&quot;, activityData$interval), 1, 2),
+                &quot;:&quot;,
+                substr(sprintf(&quot;%04s&quot;, activityData$interval), 3, 4),
+                &quot;:00&quot;,
+                sep = &quot;&quot;
+        ),
+        &quot;%Y-%m-%d %H:%M:%S&quot;
+    ),
+    tz = &quot;UTC&quot;
+)
+
+## combine the date and time into a single value
+activityData$dateTime &lt;- as.POSIXct(
+    strptime(
+        paste(  activityData$date,
+                strftime(activityData$interval, format = &quot;%H:%M:%S&quot;, tz = &quot;UTC&quot;),
+                sep = &quot; &quot;
+        ),
+        &quot;%Y-%m-%d %H:%M:%S&quot;
+    ),
+    tz = &quot;UTC&quot;
+)</code></pre>
+</div>
+<div id="what-is-mean-total-number-of-steps-taken-per-day" class="section level2">
+<h2>What is mean total number of steps taken per day?</h2>
+<pre class="r"><code>totalSteps &lt;- aggregate(
+    formula = steps ~ date,
+    data = activityData,
+    FUN = sum,
+    na.action = na.omit
+)
+
+
+dailyStepsAvg &lt;- mean(totalSteps$steps)
+dailyStepsMedian &lt;- median(totalSteps$steps)</code></pre>
+<pre class="r"><code>plotTotalSteps &lt;- ggplot(totalSteps, aes(date))
+plotTotalSteps + geom_bar(
+    aes(weight = steps),
+    color = &quot;blue&quot;,
+    fill = &quot;lightblue&quot;
+    ) +
+    labs(title = &quot;Total Steps Per Day&quot;,
+        subtitle = &quot;No Imputation&quot;,
+        x = &quot;Date&quot;,
+        y = &quot;Number of Steps&quot;
+    )</code></pre>
+<p><img src="PA1_template_files/figure-html/plotTotalStepsPerDay-1.png" /><!-- --> The average number of steps per day is <strong>10766.2</strong>.</p>
+<p>The median number of steps per day is <strong>10765</strong>.</p>
+</div>
+<div id="what-is-the-average-daily-activity-pattern" class="section level2">
+<h2>What is the average daily activity pattern?</h2>
+<p>I guess I need to make a time-series plot of the inter-average for multiple days here.</p>
+<pre class="r"><code># create interval averages for all days
+intervalStepsAvg &lt;- aggregate(
+    formula = steps ~ interval,
+    data = activityData,
+    FUN = mean,
+    na.action = na.omit
+)
+
+# determine which interval has the largest number of steps
+intervalStepsMax &lt;- intervalStepsAvg[which.max(intervalStepsAvg$steps),]</code></pre>
+<pre class="r"><code># plot &#39;em intervals up real good
+plotIntervalSteps &lt;- ggplot(intervalStepsAvg, aes(interval, steps))
+plotIntervalSteps +
+    geom_path(color = &quot;blue&quot;) +
+    labs(title = &quot;Daily Average Steps&quot;,
+         subtitle = &quot;No Imputation&quot;,
+         x = &quot;Time of Day&quot;,
+         y = &quot;Average Steps&quot;) +
+    scale_x_datetime(labels = date_format(&quot;%H:%M&quot;, tz = &quot;UTC&quot;))</code></pre>
+<p><img src="PA1_template_files/figure-html/plotIntervalAverages-1.png" /><!-- --></p>
+<p>The 5-minute interval containing the most steps is <strong>8:35 AM</strong> with <strong>206</strong> steps.</p>
+</div>
+<div id="imputing-missing-values" class="section level2">
+<h2>Imputing missing values</h2>
+<p>What I want to do here is append an additional column to the data frame, where the original <code>steps</code> values is used if not <code>NA</code>, and if the value is missing, substitute the average five-minute value for the entire data set that is appropriate for that specific interval.</p>
+<p>The total number of <code>NA</code> intervals is <strong>2304</strong>.</p>
+<pre class="r"><code># append an imputed number of steps to the original activity data.
+activityData$stepsImpute &lt;- cbind(
+    apply(activityData[,c(&quot;steps&quot;,&quot;interval&quot;)],
+        1,
+        function(x) as.integer(
+            ifelse(
+                is.na(x[&#39;steps&#39;]),
+                    round(
+                        intervalStepsAvg[
+                            which(intervalStepsAvg$interval == x[&#39;interval&#39;]),
+                        ]$steps,
+                        digits = 0),
+                x[&#39;steps&#39;]
+            )
+        )
+    )
+)</code></pre>
+<pre class="r"><code># aggregate the imputed total steps.
+totalStepsImpute &lt;- aggregate(
+    formula = stepsImpute ~ date,
+    data = activityData,
+    FUN = sum
+)
+
+names(totalStepsImpute) &lt;- c(&quot;date&quot;,&quot;stepsImpute&quot;)
+
+dailyStepsImputeAvg &lt;- mean(totalStepsImpute$stepsImpute)
+dailyStepsImputeMedian &lt;- median(totalStepsImpute$stepsImpute)</code></pre>
+<pre class="r"><code># make a graph, recieve cookie
+plotTotalStepsImpute &lt;- ggplot(totalStepsImpute, aes(date))
+plotTotalStepsImpute + geom_bar(
+    aes(weight = stepsImpute),
+    color = &quot;firebrick&quot;,
+    fill = &quot;firebrick1&quot;
+    ) +
+    labs(title = &quot;Total Steps Per Day&quot;,
+        subtitle = &quot;Data Imputed from Interval Average&quot;,
+        x = &quot;Date&quot;,
+        y = &quot;Number of Steps&quot;
+    )</code></pre>
+<p><img src="PA1_template_files/figure-html/plotStepsImpute-1.png" /><!-- --></p>
+<p>After imputation, the average number of steps per day is <strong>10765.6</strong>.</p>
+<p>The median number of steps per day is <strong>10762</strong>.</p>
+</div>
+<div id="are-there-differences-in-activity-patterns-between-weekdays-and-weekends" class="section level2">
+<h2>Are there differences in activity patterns between weekdays and weekends?</h2>
+<p>Yes, I am wasting my stupid weekend working on this project, while instead, I get paid to work on weekdays.</p>
+<pre class="r"><code>#add a day of week, why not?
+activityData$dayOfWeek &lt;- cbind(weekdays(activityData$dateTime))
+
+#then classify that day from above as a weekday/weekend in another column
+activityData$weekend &lt;- cbind(
+    apply(
+        activityData[,&quot;dayOfWeek&quot;],
+        1,
+        function(x) ifelse(x %in% c(&quot;Saturday&quot;,&quot;Sunday&quot;), &quot;Weekend&quot;, &quot;Weekday&quot;)
+    )
+)
+
+# calculate interval averages of imputed steps for weekdays, yay!
+intervalStepsAvgWeekday &lt;- aggregate(
+    formula = stepsImpute ~ interval,
+    data = activityData[which(activityData$weekend == &quot;Weekday&quot;),],
+    FUN = mean,
+    na.action = na.omit
+)
+
+names(intervalStepsAvgWeekday) &lt;- c(&quot;interval&quot;,&quot;stepsImpute&quot;)
+
+# I should probably have defined a function to aggregate this!
+intervalStepsAvgWeekend &lt;- aggregate(
+    formula = stepsImpute ~ interval,
+    data = activityData[which(activityData$weekend == &quot;Weekend&quot;),],
+    FUN = mean,
+    na.action = na.omit
+)
+
+names(intervalStepsAvgWeekend) &lt;- c(&quot;interval&quot;,&quot;stepsImpute&quot;)</code></pre>
+<pre class="r"><code># make another graph, probably should have written a function for this, too!
+plotIntervalStepsWeekday &lt;- ggplot(intervalStepsAvgWeekday, aes(interval, stepsImpute))
+plotAvgWeekday &lt;- plotIntervalStepsWeekday +
+    geom_path(color = &quot;blue&quot;) +
+    labs(title = &quot;Daily Average Steps&quot;,
+         subtitle = &quot;Weekday&quot;,
+         x = &quot;Time of Day&quot;,
+         y = &quot;Average Steps&quot;) +
+    scale_x_datetime(labels = date_format(&quot;%H:%M&quot;, tz = &quot;UTC&quot;)) +
+    ylim(0, 250)
+
+# yeah, I definitely should have written a function to do this!
+plotIntervalStepsWeekend &lt;- ggplot(intervalStepsAvgWeekend, aes(interval, stepsImpute))
+plotAvgWeekend &lt;- plotIntervalStepsWeekend +
+    geom_path(color = &quot;blue&quot;) +
+    labs(title = &quot;Daily Average Steps&quot;,
+         subtitle = &quot;Weekend&quot;,
+         x = &quot;Time of Day&quot;,
+         y = &quot;Average Steps&quot;) +
+    scale_x_datetime(labels = date_format(&quot;%H:%M&quot;, tz = &quot;UTC&quot;)) +
+    ylim(0, 250)
+
+multiplot(plotAvgWeekday, plotAvgWeekend, cols = 1)</code></pre>
+<p><img src="PA1_template_files/figure-html/plotWeekendIdiocy-1.png" /><!-- --></p>
+<p>Yeah, there sure are some differences there.</p>
+</div>
+
+
+
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.header').parent('thead').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

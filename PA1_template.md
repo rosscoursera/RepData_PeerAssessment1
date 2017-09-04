@@ -1,12 +1,7 @@
----
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: yes
-    self_contained: no
----
+# Reproducible Research: Peer Assessment 1
 
-```{r setup, include = TRUE}
+
+```r
 knitr::opts_chunk$set(echo = TRUE)
 library(ggplot2)
 library(scales)
@@ -24,8 +19,8 @@ The step data is loaded from a '[activity.csv](https://d396qusza40orc.cloudfront
 A fourth column was appended using the code below to represent a POSIXct datetiem value, where the date and five-minute time of day are pasted together and parsed using the `strptime()` function.
 
 
-```{r loadActivityData}
 
+```r
 activityData <- read.csv(
     file = 'activity.csv',
     colClasses = c('integer', 'character','character'),
@@ -69,14 +64,13 @@ activityData$dateTime <- as.POSIXct(
     ),
     tz = "UTC"
 )
-
 ```
 
 
 ## What is mean total number of steps taken per day?
 
-```{r totalStepsPerDay}
 
+```r
 totalSteps <- aggregate(
     formula = steps ~ date,
     data = activityData,
@@ -88,8 +82,8 @@ totalSteps <- aggregate(
 dailyStepsAvg <- mean(totalSteps$steps)
 dailyStepsMedian <- median(totalSteps$steps)
 ```
-```{r plotTotalStepsPerDay}
 
+```r
 plotTotalSteps <- ggplot(totalSteps, aes(date))
 plotTotalSteps + geom_bar(
     aes(weight = steps),
@@ -101,19 +95,20 @@ plotTotalSteps + geom_bar(
         x = "Date",
         y = "Number of Steps"
     )
-
 ```
-The average number of steps per day is **`r sprintf("%.1f", dailyStepsAvg)`**.
 
-The median number of steps per day is **`r sprintf("%i", dailyStepsMedian)`**.
+![](PA1_template_files/figure-html/plotTotalStepsPerDay-1.png)<!-- -->
+The average number of steps per day is **10766.2**.
+
+The median number of steps per day is **10765**.
 
 
 ## What is the average daily activity pattern?
 
 I guess I need to make a time-series plot of the inter-average for multiple days here.
 
-```{r computeIntervalAverages}
 
+```r
 # create interval averages for all days
 intervalStepsAvg <- aggregate(
     formula = steps ~ interval,
@@ -124,10 +119,9 @@ intervalStepsAvg <- aggregate(
 
 # determine which interval has the largest number of steps
 intervalStepsMax <- intervalStepsAvg[which.max(intervalStepsAvg$steps),]
-
 ```
-```{r plotIntervalAverages}
 
+```r
 # plot 'em intervals up real good
 plotIntervalSteps <- ggplot(intervalStepsAvg, aes(interval, steps))
 plotIntervalSteps +
@@ -137,19 +131,20 @@ plotIntervalSteps +
          x = "Time of Day",
          y = "Average Steps") +
     scale_x_datetime(labels = date_format("%H:%M", tz = "UTC"))
-
 ```
 
-The 5-minute interval containing the most steps is **`r sub("^\\s+", "", strftime(intervalStepsMax$interval, format = "%l:%M %p", tz = "UTC"))`** with **`r sprintf("%.0f", intervalStepsMax$steps)`** steps.
+![](PA1_template_files/figure-html/plotIntervalAverages-1.png)<!-- -->
+
+The 5-minute interval containing the most steps is **8:35 AM** with **206** steps.
 
 ## Imputing missing values
 
 What I want to do here is append an additional column to the data frame, where the original `steps` values is used if not `NA`, and if the value is missing, substitute the average five-minute value for the entire data set that is appropriate for that specific interval.
 
-The total number of `NA` intervals is **`r nrow(activityData[is.na(activityData$steps),])`**.
+The total number of `NA` intervals is **2304**.
 
-```{r imputeOhNooo}
 
+```r
 # append an imputed number of steps to the original activity data.
 activityData$stepsImpute <- cbind(
     apply(activityData[,c("steps","interval")],
@@ -167,10 +162,9 @@ activityData$stepsImpute <- cbind(
         )
     )
 )
-
 ```
-```{r aggregateStepsImpute}
 
+```r
 # aggregate the imputed total steps.
 totalStepsImpute <- aggregate(
     formula = stepsImpute ~ date,
@@ -182,10 +176,9 @@ names(totalStepsImpute) <- c("date","stepsImpute")
 
 dailyStepsImputeAvg <- mean(totalStepsImpute$stepsImpute)
 dailyStepsImputeMedian <- median(totalStepsImpute$stepsImpute)
-
 ```
-```{r plotStepsImpute}
 
+```r
 # make a graph, recieve cookie
 plotTotalStepsImpute <- ggplot(totalStepsImpute, aes(date))
 plotTotalStepsImpute + geom_bar(
@@ -198,19 +191,20 @@ plotTotalStepsImpute + geom_bar(
         x = "Date",
         y = "Number of Steps"
     )
-
 ```
 
-After imputation, the average number of steps per day is **`r sprintf("%.1f", dailyStepsImputeAvg)`**.
+![](PA1_template_files/figure-html/plotStepsImpute-1.png)<!-- -->
 
-The median number of steps per day is **`r sprintf("%i", dailyStepsImputeMedian)`**.
+After imputation, the average number of steps per day is **10765.6**.
+
+The median number of steps per day is **10762**.
 
 ## Are there differences in activity patterns between weekdays and weekends?
 
 Yes, I am wasting my stupid weekend working on this project, while instead, I get paid to work on weekdays.
 
-```{r processWeekendIdiocy}
 
+```r
 #add a day of week, why not?
 activityData$dayOfWeek <- cbind(weekdays(activityData$dateTime))
 
@@ -242,57 +236,10 @@ intervalStepsAvgWeekend <- aggregate(
 )
 
 names(intervalStepsAvgWeekend) <- c("interval","stepsImpute")
-
 ```
-```{r multiplot, include=FALSE}
-# Multiple plot function
-#
-# ggplot objects can be passed in ..., or to plotlist (as a list of ggplot objects)
-# - cols:   Number of columns in layout
-# - layout: A matrix specifying the layout. If present, 'cols' is ignored.
-#
-# If the layout is something like matrix(c(1,2,3,3), nrow=2, byrow=TRUE),
-# then plot 1 will go in the upper left, 2 will go in the upper right, and
-# 3 will go all the way across the bottom.
-#
-multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
-  library(grid)
 
-  # Make a list from the ... arguments and plotlist
-  plots <- c(list(...), plotlist)
 
-  numPlots = length(plots)
-
-  # If layout is NULL, then use 'cols' to determine layout
-  if (is.null(layout)) {
-    # Make the panel
-    # ncol: Number of columns of plots
-    # nrow: Number of rows needed, calculated from # of cols
-    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
-                    ncol = cols, nrow = ceiling(numPlots/cols))
-  }
-
- if (numPlots==1) {
-    print(plots[[1]])
-
-  } else {
-    # Set up the page
-    grid.newpage()
-    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
-
-    # Make each plot, in the correct location
-    for (i in 1:numPlots) {
-      # Get the i,j matrix positions of the regions that contain this subplot
-      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
-
-      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
-                                      layout.pos.col = matchidx$col))
-    }
-  }
-}
-```
-```{r plotWeekendIdiocy}
-
+```r
 # make another graph, probably should have written a function for this, too!
 plotIntervalStepsWeekday <- ggplot(intervalStepsAvgWeekday, aes(interval, stepsImpute))
 plotAvgWeekday <- plotIntervalStepsWeekday +
@@ -316,7 +263,8 @@ plotAvgWeekend <- plotIntervalStepsWeekend +
     ylim(0, 250)
 
 multiplot(plotAvgWeekday, plotAvgWeekend, cols = 1)
-
 ```
+
+![](PA1_template_files/figure-html/plotWeekendIdiocy-1.png)<!-- -->
 
 Yeah, there sure are some differences there.
